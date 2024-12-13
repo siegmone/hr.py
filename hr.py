@@ -12,6 +12,7 @@ class Watchdog:
         self.target = os.path.abspath(target)
         self.target_basename = os.path.basename(self.target)
         self.last_modified = os.path.getmtime(self.target)
+        self.process = None
 
     def start(self):
         self.last_check = os.path.getmtime(self.target)
@@ -30,14 +31,20 @@ class Watchdog:
                 self.print_output(stdout, stderr)
             time.sleep(0.1)
 
+    def stop(self):
+        if self.process and self.process.poll() is None:
+            self.process.kill()
+
     def run_script(self) -> (str, str):
+        if self.process and self.process.poll() is None:
+            self.process.kill()
         try:
-            result = subprocess.run(
+            self.process = subprocess.Popen(
                 ["python", self.target],
-                capture_output=True,
-                text=True
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
-            return result.stdout, result.stderr
+            stdout, stderr = self.process.communicate()
+            return stdout.decode("utf-8"), stderr.decode("utf-8")
         except Exception as e:
             print(f"Error running script: {e}")
 
@@ -128,4 +135,8 @@ if __name__ == "__main__":
     print(f"Starting watchdog on {target}")
 
     watchdog = Watchdog(target)
-    watchdog.start()
+    try:
+        watchdog.start()
+    except KeyboardInterrupt:
+        watchdog.stop()
+        sys.exit(0)
